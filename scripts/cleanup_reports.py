@@ -1,7 +1,7 @@
 """
 Delete generated reports older than N days from the agent workspace. Dry run unless --apply is given.
 
-Usage: PBI_TENANT_ID=... PBI_CLIENT_ID=... PBI_CLIENT_SECRET=... python3 cleanup_reports.py [--days 30] [--apply]
+Usage: PBI_TENANT_ID=... PBI_CLIENT_ID=... PBI_CLIENT_SECRET=... python3 scripts/cleanup_reports.py [--days 30] [--apply]
 """
 
 import argparse
@@ -10,7 +10,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from powerbi_mcp_server.catalog import load_catalog  # noqa: E402
 from powerbi_mcp_server.cleanup import DEFAULT_MAX_AGE_DAYS, find_expired  # noqa: E402

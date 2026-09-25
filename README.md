@@ -15,7 +15,7 @@ eigene Sicherheitsdomäne mit eigenen Zugangsdaten ist.
 | Semantic Model lesen? | Nicht über die REST-API möglich (Execute Queries lehnt INFO-Funktionen und DMV ab). Das BI-Team beschreibt Tabellen und Measures im Katalog. |
 | Visuals frei erzeugen? | Nein. Es gibt keine "Visual hinzufügen"-API. Berichte entstehen nur durch Klonen einer Vorlage (Clone Report mit `targetModelId`), das Layout ist fest. |
 | Refresh-Limit? | Auf Shared Capacity sind acht Refreshes pro Tag erlaubt, geplante eingerechnet. Der Server liest die Refresh-Historie von Power BI und lehnt ab, wenn einer läuft, der letzte weniger als 10 Minuten zurückliegt oder das Tageslimit des Datasets (Standard 4) in den letzten 24 Stunden erreicht ist. Kein eigener Zustand, gilt auch nach Neustarts. |
-| Berichts-Wildwuchs? | Erzeugte Berichte liegen nur im Agent-Workspace, heißen `<Name> [agent:<nutzer>:<datum>]`, jeder Nutzer darf höchstens 10 haben und nur eigene auflisten, abfragen und löschen. `cleanup_reports.py` löscht Berichte nach N Tagen (Standard 30, ohne `--apply` nur Vorschau). |
+| Berichts-Wildwuchs? | Erzeugte Berichte liegen nur im Agent-Workspace, heißen `<Name> [agent:<nutzer>:<datum>]`, jeder Nutzer darf höchstens 10 haben und nur eigene auflisten, abfragen und löschen. `scripts/cleanup_reports.py` löscht Berichte nach N Tagen (Standard 30, ohne `--apply` nur Vorschau). |
 | Fehlt die Berechtigung oder das Objekt? | Beides liefert dieselbe Antwort, damit nichts über Existenz verraten wird. |
 
 ## Tools
