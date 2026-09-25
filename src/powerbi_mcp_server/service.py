@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import re
 from collections.abc import Callable
@@ -19,6 +21,9 @@ MIN_REFRESH_INTERVAL = timedelta(minutes=10)
 PUSH_BATCH_SIZE = 1000
 DATA_TABLE = "Daten"
 AGGREGATIONS = {"sum": ("Summe", "SUM"), "average": ("Durchschnitt", "AVERAGE")}
+REPEAT_WINDOW = timedelta(minutes=10)
+CREATED_HINT = "Bericht erstellt. Nenne dem Nutzer jetzt den Link und rufe dieses Werkzeug nicht erneut auf."
+REPEAT_HINT = "Diesen Bericht gibt es bereits, es wurde kein weiterer erzeugt. Nenne dem Nutzer den Link."
 CATALOG_NOT_READY = {"error": "Katalog enthält noch Platzhalter-GUIDs, siehe README", "error_type": "configuration"}
 
 
@@ -77,6 +82,7 @@ class PowerBiService:
         self._now = now
         self._fabric = fabric
         self._query_runner = query_runner
+        self._recent: dict[str, tuple[datetime, dict[str, object]]] = {}
         self._agent_workspace = catalog["agent_workspace_id"]
 
     def _valid_user(self, user: str) -> dict[str, object] | None:
@@ -252,6 +258,10 @@ class PowerBiService:
             name = NAME_FORBIDDEN_RE.sub("", title or "").strip()[:MAX_REPORT_NAME_CHARS]
             if not name:
                 return {"error": "Berichtstitel fehlt", "error_type": "validation"}
+            request_key = hashlib.sha256(json.dumps([user, name.lower()]).encode()).hexdigest()
+            earlier = self._recent.get(request_key)
+            if earlier and self._now() - earlier[0] < REPEAT_WINDOW:
+                return earlier[1] | {"hinweis": REPEAT_HINT}
             if len(self._own_reports(user)) >= MAX_REPORTS_PER_USER:
                 return {
                     "error": f"Höchstens {MAX_REPORTS_PER_USER} erzeugte Berichte je Nutzer, bitte zuerst einen löschen",
@@ -291,12 +301,14 @@ class PowerBiService:
             except PowerBiError:
                 self._client.delete_dataset(self._agent_workspace, dataset["id"])
                 raise
-            return {
+            result = {
                 "report_id": report["id"],
                 "name": name,
                 "web_url": f"https://app.powerbi.com/groups/{self._agent_workspace}/reports/{report['id']}",
                 "rows": len(rows),
             }
+            self._recent[request_key] = (self._now(), result)
+            return result | {"hinweis": CREATED_HINT}
 
         return self._guard("create_report_from_query", user, call)
 

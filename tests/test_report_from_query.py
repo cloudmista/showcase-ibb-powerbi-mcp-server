@@ -5,7 +5,7 @@ import pytest
 
 from powerbi_mcp_server.powerbi import PowerBiError
 from powerbi_mcp_server.query import QueryError, _cell, _column_type
-from powerbi_mcp_server.service import MAX_REPORTS_PER_USER, PowerBiService, owner_tag
+from powerbi_mcp_server.service import CREATED_HINT, MAX_REPORTS_PER_USER, REPEAT_HINT, REPEAT_WINDOW, PowerBiService, owner_tag
 from powerbi_mcp_server.sql_guard import SqlValidationError, validate_select
 
 W = "aaaaaaaa-0000-0000-0000-000000000001"
@@ -75,7 +75,13 @@ def test_the_query_runs_as_the_user_and_only_its_rows_are_pushed() -> None:
     service, client, fabric, runner = make()
     result = service.create_report_from_query("alice", "SELECT 1", "Bewilligungen", "bezirk", "bewilligt", "jahr")
     assert runner.calls == [("alice", "SELECT 1")]
-    assert result == {"report_id": "rep-1", "name": "Bewilligungen", "web_url": f"https://app.powerbi.com/groups/{W}/reports/rep-1", "rows": 2}
+    assert result == {
+        "report_id": "rep-1",
+        "name": "Bewilligungen",
+        "web_url": f"https://app.powerbi.com/groups/{W}/reports/rep-1",
+        "rows": 2,
+        "hinweis": CREATED_HINT,
+    }
     _, _, name, tables = client.calls[0]
     assert name == "Bewilligungen" + owner_tag("alice", "2026-09-25")
     assert tables[0]["columns"] == [{"name": "bezirk", "dataType": "string"}, {"name": "jahr", "dataType": "Int64"}, {"name": "bewilligt", "dataType": "Double"}]
@@ -180,3 +186,30 @@ def test_column_types_and_cells_follow_the_driver_values() -> None:
     assert _cell(Decimal("1.5"), "Double") == 1.5
     assert _cell(date(2026, 1, 2), "DateTime") == "2026-01-02"
     assert _cell(None, "Int64") is None
+
+
+def test_a_repeated_title_returns_the_first_report_even_if_the_sql_differs() -> None:
+    service, client, fabric, runner = make()
+    first = service.create_report_from_query("alice", "SELECT 1", "T", "bezirk", "bewilligt")
+    second = service.create_report_from_query("alice", "SELECT 1 AS x", "t", "bezirk", "bewilligt")
+    assert second["report_id"] == first["report_id"] and second["hinweis"] == REPEAT_HINT
+    assert len(fabric.created) == 1 and len(runner.calls) == 1
+    assert sum(1 for c in client.calls if c[0] == "dataset") == 1
+
+
+def test_a_different_request_or_user_creates_a_new_report() -> None:
+    service, _, fabric, _ = make()
+    service.create_report_from_query("alice", "SELECT 1", "T", "bezirk", "bewilligt")
+    service.create_report_from_query("alice", "SELECT 2", "Anderer Titel", "bezirk", "bewilligt")
+    service.create_report_from_query("bob", "SELECT 1", "T", "bezirk", "bewilligt")
+    assert len(fabric.created) == 3
+
+
+def test_the_repeat_protection_expires() -> None:
+    clock = [NOW]
+    client, fabric, runner = FakeClient(), FakeFabric(), FakeRunner()
+    service = PowerBiService(CATALOG, client, None, now=lambda: clock[0], fabric=fabric, query_runner=runner)
+    service.create_report_from_query("alice", "SELECT 1", "T", "bezirk", "bewilligt")
+    clock[0] = NOW + REPEAT_WINDOW
+    service.create_report_from_query("alice", "SELECT 1", "T", "bezirk", "bewilligt")
+    assert len(fabric.created) == 2
