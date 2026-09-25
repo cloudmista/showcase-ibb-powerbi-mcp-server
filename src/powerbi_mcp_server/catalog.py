@@ -78,6 +78,16 @@ def is_configured(catalog: dict[str, object]) -> bool:
     return PLACEHOLDER_GUID not in json.dumps(catalog)
 
 
+def workspace_configured(catalog: dict[str, object]) -> bool:
+    """
+    Tell whether the agent workspace id has been replaced with a real value.
+
+    :param catalog dict: A validated catalog
+    :return: False while the agent workspace is still the all-zero placeholder
+    """
+    return catalog["agent_workspace_id"] != PLACEHOLDER_GUID
+
+
 def load_catalog(path: Path | None = None) -> dict[str, object]:
     """
     Read and validate the catalog file.

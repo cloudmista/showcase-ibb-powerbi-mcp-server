@@ -5,8 +5,10 @@ import socket
 from fastmcp import FastMCP
 
 from .access import AccessChecker
-from .catalog import CatalogError, is_configured, load_catalog
+from .catalog import CatalogError, load_catalog, workspace_configured
+from .fabric import FabricClient
 from .powerbi import PowerBiClient
+from .query import ImpalaQueryRunner
 from .service import PowerBiService
 
 logging.basicConfig(level=logging.INFO)
@@ -31,10 +33,12 @@ def get_service() -> PowerBiService:
             catalog = load_catalog()
         except CatalogError as exc:
             raise RuntimeError(f"Katalog fehlerhaft: {exc}") from exc
-        if not is_configured(catalog):
-            raise RuntimeError("Katalog enthält noch Platzhalter-GUIDs, siehe README")
-        client = PowerBiClient(os.environ["PBI_TENANT_ID"], os.environ["PBI_CLIENT_ID"], os.environ["PBI_CLIENT_SECRET"])
-        _service = PowerBiService(catalog, client, AccessChecker())
+        if not workspace_configured(catalog):
+            raise RuntimeError("Der Agent-Workspace im Katalog ist noch ein Platzhalter, siehe README")
+        credentials = (os.environ["PBI_TENANT_ID"], os.environ["PBI_CLIENT_ID"], os.environ["PBI_CLIENT_SECRET"])
+        _service = PowerBiService(
+            catalog, PowerBiClient(*credentials), AccessChecker(), fabric=FabricClient(*credentials), query_runner=ImpalaQueryRunner()
+        )
     return _service
 
 
@@ -78,6 +82,24 @@ def create_powerbi_report(template_key: str, dataset_key: str, report_name: str,
     The layout is fixed by the template, free-form visuals are not possible.
     """
     return _run(lambda s: s.create_report(acting_as_user, template_key, dataset_key, report_name))
+
+
+@mcp.tool()
+def create_report_from_query(
+    sql: str,
+    title: str,
+    dimension_column: str,
+    measure_column: str,
+    acting_as_user: str,
+    date_column: str | None = None,
+    aggregation: str = "sum",
+) -> dict[str, object]:
+    """
+    Run one read-only SELECT as acting_as_user and turn exactly its result into a Power BI report with a card, a bar
+    chart of measure_column by dimension_column and an optional slicer on date_column. Aggregate in the SQL so the
+    result stays small. Returns the report link. Only the user's own query result is sent to Power BI.
+    """
+    return _run(lambda s: s.create_report_from_query(acting_as_user, sql, title, dimension_column, measure_column, date_column, aggregation))
 
 
 @mcp.tool()

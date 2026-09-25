@@ -3,3 +3,4 @@ mcp[cli]>=1.9.4
 impyla==0.24.0
 httpx>=0.27
 certifi
+sqlglot>=30

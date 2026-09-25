@@ -52,6 +52,12 @@ class FakeClient:
     def delete_report(self, group_id, report_id):
         self.calls.append(("delete", group_id, report_id))
 
+    def list_datasets(self, group_id):
+        return []
+
+    def delete_dataset(self, group_id, dataset_id):
+        self.calls.append(("delete_dataset", group_id, dataset_id))
+
     def refresh_history(self, group_id, dataset_id, top=None):
         return self.history[:top] if top else list(self.history)
 

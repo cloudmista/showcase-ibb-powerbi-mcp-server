@@ -3,7 +3,10 @@ import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
+from .catalog import is_configured
+from .pbir import Field, build_report_parts
 from .powerbi import PowerBiError
+from .query import QueryError
 
 log = logging.getLogger("powerbi_mcp_server.audit")
 
@@ -13,6 +16,10 @@ NAME_FORBIDDEN_RE = re.compile(r"[\[\]\x00-\x1f]")
 MAX_REPORT_NAME_CHARS = 60
 MAX_REPORTS_PER_USER = 10
 MIN_REFRESH_INTERVAL = timedelta(minutes=10)
+PUSH_BATCH_SIZE = 1000
+DATA_TABLE = "Daten"
+AGGREGATIONS = {"sum": ("Summe", "SUM"), "average": ("Durchschnitt", "AVERAGE")}
+CATALOG_NOT_READY = {"error": "Katalog enthält noch Platzhalter-GUIDs, siehe README", "error_type": "configuration"}
 
 
 def _denied() -> dict[str, object]:
@@ -61,11 +68,15 @@ class PowerBiService:
         client,
         access_checker,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        fabric=None,
+        query_runner=None,
     ) -> None:
         self._catalog = catalog
         self._client = client
         self._checker = access_checker
         self._now = now
+        self._fabric = fabric
+        self._query_runner = query_runner
         self._agent_workspace = catalog["agent_workspace_id"]
 
     def _valid_user(self, user: str) -> dict[str, object] | None:
@@ -109,6 +120,8 @@ class PowerBiService:
         :return: {"datasets": [...]} or an error dict
         """
         def call() -> dict[str, object]:
+            if not is_configured(self._catalog):
+                return CATALOG_NOT_READY
             templates = self._catalog["templates"]
             return {
                 "datasets": [
@@ -136,6 +149,8 @@ class PowerBiService:
         :return: Name, description, tables and measures, or a denied error
         """
         def call() -> dict[str, object]:
+            if not is_configured(self._catalog):
+                return CATALOG_NOT_READY
             dataset = self._dataset_for(user, dataset_key)
             if dataset is None:
                 return _denied()
@@ -158,6 +173,8 @@ class PowerBiService:
         :return: {"templates": [...]} with key, name, description and dataset keys the user may use
         """
         def call() -> dict[str, object]:
+            if not is_configured(self._catalog):
+                return CATALOG_NOT_READY
             visible = self._visible_datasets(user)
             if dataset_key is not None and dataset_key not in visible:
                 return _denied()
@@ -181,6 +198,8 @@ class PowerBiService:
         :return: {report_id, name, web_url} or an error dict
         """
         def call() -> dict[str, object]:
+            if not is_configured(self._catalog):
+                return CATALOG_NOT_READY
             dataset = self._dataset_for(user, dataset_key)
             template = self._catalog["templates"].get(template_key)
             if dataset is None or template is None or dataset_key not in template["dataset_keys"]:
@@ -200,6 +219,86 @@ class PowerBiService:
             return {"report_id": report["id"], "name": full_name, "web_url": report.get("webUrl", "")}
 
         return self._guard("create_powerbi_report", user, call)
+
+    def create_report_from_query(
+        self,
+        user: str,
+        sql: str,
+        title: str,
+        dimension_column: str,
+        measure_column: str,
+        date_column: str | None = None,
+        aggregation: str = "sum",
+    ) -> dict[str, object]:
+        """
+        Run one SELECT as the user, push exactly its rows into a new push dataset in the agent workspace and create a
+        report from the PBIR template: a card and a bar chart of the measure by the dimension and, optionally, a date
+        slicer. The data is the user's query result, so Ranger decides what ends up in Power BI.
+
+        :param user str: Trusted username, the query runs as this user
+        :param sql str: A single read-only SELECT, aggregated so it stays well below the row limit
+        :param title str: Report title, tagged with the owner and date by the server
+        :param dimension_column str: Result column shown as categories of the bar chart
+        :param measure_column str: Numeric result column that is aggregated
+        :param date_column str: Optional result column for a slicer
+        :param aggregation str: sum or average
+        :return: {report_id, name, web_url, rows} or an error dict
+        """
+        def call() -> dict[str, object]:
+            if self._fabric is None or self._query_runner is None:
+                return {"error": "Berichte aus Abfragen sind nicht konfiguriert", "error_type": "configuration"}
+            if aggregation not in AGGREGATIONS:
+                return {"error": "aggregation muss sum oder average sein", "error_type": "validation"}
+            name = NAME_FORBIDDEN_RE.sub("", title or "").strip()[:MAX_REPORT_NAME_CHARS]
+            if not name:
+                return {"error": "Berichtstitel fehlt", "error_type": "validation"}
+            if len(self._own_reports(user)) >= MAX_REPORTS_PER_USER:
+                return {
+                    "error": f"Höchstens {MAX_REPORTS_PER_USER} erzeugte Berichte je Nutzer, bitte zuerst einen löschen",
+                    "error_type": "limit",
+                }
+            try:
+                columns, types, rows = self._query_runner.run(user, sql)
+            except QueryError as exc:
+                return {"error": str(exc), "error_type": "query"}
+            lookup = {c.lower(): i for i, c in enumerate(columns)}
+            wanted = {"dimension_column": dimension_column, "measure_column": measure_column}
+            if date_column:
+                wanted["date_column"] = date_column
+            for label, column in wanted.items():
+                if (column or "").lower() not in lookup:
+                    return {"error": f"{label} {column!r} ist keine Spalte der Abfrage, Spalten: {', '.join(columns)}", "error_type": "validation"}
+            dimension, measure = columns[lookup[dimension_column.lower()]], columns[lookup[measure_column.lower()]]
+            if types[lookup[measure.lower()]] not in ("Int64", "Double"):
+                return {"error": f"measure_column {measure!r} ist nicht numerisch", "error_type": "validation"}
+            prefix, dax = AGGREGATIONS[aggregation]
+            measure_name = f"{prefix} {measure}"
+            escaped = measure.replace("]", "]]")
+            full_name = name + owner_tag(user, self._now().strftime("%Y-%m-%d"))
+            table = {
+                "name": DATA_TABLE,
+                "columns": [{"name": c, "dataType": t} for c, t in zip(columns, types)],
+                "measures": [{"name": measure_name, "expression": f"{dax}({DATA_TABLE}[{escaped}])"}],
+            }
+            dataset = self._client.create_push_dataset(self._agent_workspace, full_name, [table])
+            try:
+                for start in range(0, len(rows), PUSH_BATCH_SIZE):
+                    batch = [dict(zip(columns, row)) for row in rows[start : start + PUSH_BATCH_SIZE]]
+                    self._client.add_rows(self._agent_workspace, dataset["id"], DATA_TABLE, batch)
+                date_field = Field(DATA_TABLE, columns[lookup[date_column.lower()]]) if date_column else None
+                parts = build_report_parts(dataset["id"], name, Field(DATA_TABLE, measure_name), Field(DATA_TABLE, dimension), date_field)
+                report = self._fabric.create_report(self._agent_workspace, full_name, parts)
+            except PowerBiError:
+                self._client.delete_dataset(self._agent_workspace, dataset["id"])
+                raise
+            return {
+                "report_id": report["id"],
+                "name": name,
+                "web_url": f"https://app.powerbi.com/groups/{self._agent_workspace}/reports/{report['id']}",
+                "rows": len(rows),
+            }
+
+        return self._guard("create_report_from_query", user, call)
 
     def list_reports(self, user: str) -> dict[str, object]:
         """
@@ -266,9 +365,14 @@ class PowerBiService:
         :return: {"deleted": True} or a denied error
         """
         def call() -> dict[str, object]:
-            if not any(r["id"] == report_id for r in self._own_reports(user)):
+            report = next((r for r in self._own_reports(user) if r["id"] == report_id), None)
+            if report is None:
                 return _denied()
             self._client.delete_report(self._agent_workspace, report_id)
+            for dataset in self._client.list_datasets(self._agent_workspace):
+                owner = parse_owner(dataset.get("name", ""))
+                if dataset.get("name") == report["name"] and owner and owner[0] == user:
+                    self._client.delete_dataset(self._agent_workspace, dataset["id"])
             return {"deleted": True}
 
         return self._guard("delete_generated_report", user, call)
@@ -286,6 +390,8 @@ class PowerBiService:
         :return: {refresh_id, status} or an error dict
         """
         def call() -> dict[str, object]:
+            if not is_configured(self._catalog):
+                return CATALOG_NOT_READY
             dataset = self._dataset_for(user, dataset_key)
             if dataset is None:
                 return _denied()

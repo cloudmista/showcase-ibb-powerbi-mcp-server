@@ -13,15 +13,17 @@ eigene Sicherheitsdomäne mit eigenen Zugangsdaten ist.
 | Nutzer-Token statt Service Principal? | Nicht möglich. Der Chat kennt nur die Cloudera-Identität (SSO über Knox), keinen Entra-Token, ein OBO-Tausch hat also nichts zum Tauschen. Alle Power-BI-Aufrufe laufen als ein Service Principal, aber nur für Datasets, Vorlagen und den einen Agent-Workspace aus dem Katalog. |
 | Zeilenrechte (RLS)? | Der Server führt keine DAX-Abfragen aus. Execute Queries unterstützt für Service Principals weder RLS noch SSO-Datasets. Den Bericht öffnet der Nutzer mit seinem eigenen Entra-Login, dort greift RLS nativ. Die Zahlen für den Chat kommen weiter aus SQL. |
 | Semantic Model lesen? | Nicht über die REST-API möglich (Execute Queries lehnt INFO-Funktionen und DMV ab). Das BI-Team beschreibt Tabellen und Measures im Katalog. |
-| Visuals frei erzeugen? | Nein. Es gibt keine "Visual hinzufügen"-API. Berichte entstehen nur durch Klonen einer Vorlage (Clone Report mit `targetModelId`), das Layout ist fest. |
+| Visuals frei erzeugen? | Über die Fabric REST API (Create Report mit PBIR-Definition) ja, aber nur aus festen Vorlagen im Code (`pbir.py`): Karte, Balkendiagramm, optional Datumsslicer. Der Server schreibt die Dateien, das Modell wählt nur Spalten und Titel. Auf einem Pro-Workspace live bestätigt. |
+| Woher kommen die Daten des Berichts? | `create_report_from_query` führt eine SELECT-Abfrage als der Nutzer aus (Impala doAs, Ranger entscheidet) und lädt genau dieses Ergebnis in ein neues Push-Dataset. Es ist eine Momentaufnahme, keine Live-Verbindung. |
 | Refresh-Limit? | Auf Shared Capacity sind acht Refreshes pro Tag erlaubt, geplante eingerechnet. Der Server liest die Refresh-Historie von Power BI und lehnt ab, wenn einer läuft, der letzte weniger als 10 Minuten zurückliegt oder das Tageslimit des Datasets (Standard 4) in den letzten 24 Stunden erreicht ist. Kein eigener Zustand, gilt auch nach Neustarts. |
 | Berichts-Wildwuchs? | Erzeugte Berichte liegen nur im Agent-Workspace, heißen `<Name> [agent:<nutzer>:<datum>]`, jeder Nutzer darf höchstens 10 haben und nur eigene auflisten, abfragen und löschen. `scripts/cleanup_reports.py` löscht Berichte nach N Tagen (Standard 30, ohne `--apply` nur Vorschau). |
 | Fehlt die Berechtigung oder das Objekt? | Beides liefert dieselbe Antwort, damit nichts über Existenz verraten wird. |
 
 ## Tools
 
-`list_powerbi_datasets`, `get_powerbi_semantic_model`, `list_report_templates`, `create_powerbi_report`,
-`list_my_reports`, `get_report_status`, `delete_generated_report`, `refresh_powerbi_dataset`.
+`create_report_from_query` (Bericht aus einer Abfrage, ohne Katalog), `list_my_reports`, `get_report_status`,
+`delete_generated_report` (löscht auch das zugehörige Dataset), und die Katalog-Werkzeuge `list_powerbi_datasets`,
+`get_powerbi_semantic_model`, `list_report_templates`, `create_powerbi_report`, `refresh_powerbi_dataset`.
 Alle nehmen `acting_as_user`, das Modell sieht dieses Feld nicht. Das Modell kennt nur die Schlüssel
 aus dem Katalog, nie Power-BI-GUIDs.
 
@@ -29,7 +31,7 @@ aus dem Katalog, nie Power-BI-GUIDs.
 
 `catalog.json` beschreibt Agent-Workspace, Datasets (GUIDs, Beschreibung, `requires`, Tabellen und
 Measures) und Vorlagen. Der eingecheckte Stand hat nur Platzhalter-GUIDs, solange die noch drin sind,
-melden alle Tools "Katalog enthält noch Platzhalter". Die Struktur wird beim Laden streng geprüft.
+melden die Katalog-Werkzeuge "Katalog enthält noch Platzhalter". `create_report_from_query` braucht nur den echten `agent_workspace_id`. Die Struktur wird beim Laden streng geprüft.
 
 ## Voraussetzungen auf der Power-BI-Seite
 
@@ -87,3 +89,9 @@ Refresh, Refresh-Historie, Clone, Berichte auflisten, Bericht löschen. Vor dem 
 - Ob die Refresh-Historie für Nutzer mit Member-Rolle des Service Principals lesbar ist (laut Referenz
   Schreibrecht auf das Dataset nötig).
 - Die Rechteprüfung mit echtem Ranger (`DENIAL_MARKERS` in `src/powerbi_mcp_server/access.py`).
+
+## Daten im Agent-Workspace
+
+Jeder Bericht bringt sein eigenes Push-Dataset mit den Zeilen der Abfrage mit. Wer im Agent-Workspace Mitglied oder
+Viewer ist, kann diese Datasets öffnen und sieht die Zeilen, die der Ersteller sehen durfte. Deshalb den Workspace nur
+Personen mit gleichem Datenzugriff geben, oder einen Workspace je Team anlegen.

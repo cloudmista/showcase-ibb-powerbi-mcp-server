@@ -163,3 +163,21 @@ class PowerBiClient:
         :param report_id str: Report to delete
         """
         self._request("DELETE", f"/groups/{group_id}/reports/{report_id}")
+
+    def list_datasets(self, group_id: str) -> list[dict[str, object]]:
+        """
+        List the datasets of a workspace.
+
+        :param group_id str: Workspace to list
+        :return: Datasets with id and name
+        """
+        return self._request("GET", f"/groups/{group_id}/datasets").json()["value"]
+
+    def delete_dataset(self, group_id: str, dataset_id: str) -> None:
+        """
+        Delete one dataset.
+
+        :param group_id str: Workspace of the dataset
+        :param dataset_id str: Dataset to delete
+        """
+        self._request("DELETE", f"/groups/{group_id}/datasets/{dataset_id}")
