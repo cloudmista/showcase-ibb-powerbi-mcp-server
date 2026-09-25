@@ -1,0 +1,16 @@
+[project]
+name = "powerbi-mcp-server"
+version = "0.1.0"
+description = "Power BI MCP server, template based reports and scoped refreshes, dataset visibility via Impala delegation"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.9.2",
+    "mcp[cli]>=1.9.4",
+    "impyla==0.24.0",
+    "httpx>=0.27",
+    "certifi",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

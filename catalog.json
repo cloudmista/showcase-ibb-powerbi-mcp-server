@@ -1,0 +1,73 @@
+{
+  "agent_workspace_id": "00000000-0000-0000-0000-000000000000",
+  "datasets": {
+    "foerderung": {
+      "workspace_id": "00000000-0000-0000-0000-000000000000",
+      "dataset_id": "00000000-0000-0000-0000-000000000000",
+      "name": "Förderung",
+      "description": "Anträge, Bewilligungen und Auszahlungen je Programm, Bezirk und Jahr.",
+      "requires": ["finance_foerderung.v_foerderung_official"],
+      "max_refreshes_per_day": 4,
+      "tables": [{"name": "Foerderung", "description": "Eine Zeile je Programm, Bezirk und Bewilligungsjahr"}],
+      "measures": [
+        {"name": "Bewilligt", "description": "Summe der bewilligten Beträge"},
+        {"name": "Ausgezahlt", "description": "Summe der ausgezahlten Beträge"}
+      ]
+    },
+    "portfolio": {
+      "workspace_id": "00000000-0000-0000-0000-000000000000",
+      "dataset_id": "00000000-0000-0000-0000-000000000000",
+      "name": "Portfolio und Risiko",
+      "description": "Kreditportfolio je Programm, Risikoklasse und Vergabejahr mit Ausfällen.",
+      "requires": ["finance_portfolio.v_portfolio_official"],
+      "max_refreshes_per_day": 4,
+      "tables": [{"name": "Portfolio", "description": "Eine Zeile je Programm, Risikoklasse und Vergabejahr"}],
+      "measures": [
+        {"name": "Portfoliowert", "description": "Summe der offenen Salden"},
+        {"name": "Ausfallquote", "description": "Ausgefallene Positionen geteilt durch alle Positionen"}
+      ]
+    },
+    "grw": {
+      "workspace_id": "00000000-0000-0000-0000-000000000000",
+      "dataset_id": "00000000-0000-0000-0000-000000000000",
+      "name": "GRW-Förderung",
+      "description": "GRW-Vorhaben je Bezirk und Jahr mit Investitionshebel und Arbeitsplätzen.",
+      "requires": ["finance_foerderung.v_grw_official"],
+      "max_refreshes_per_day": 4,
+      "tables": [{"name": "GRW", "description": "Eine Zeile je Bezirk und Beginnjahr"}],
+      "measures": [
+        {"name": "Investitionshebel", "description": "Investitionsvolumen geteilt durch Zuschuss"},
+        {"name": "Zuschuss je neuem Arbeitsplatz", "description": "Zuschuss geteilt durch geplante neue Arbeitsplätze"}
+      ]
+    },
+    "wohnungsbau": {
+      "workspace_id": "00000000-0000-0000-0000-000000000000",
+      "dataset_id": "00000000-0000-0000-0000-000000000000",
+      "name": "Wohnungsbau",
+      "description": "Geförderte Wohnungsbauprojekte und Einheiten je Bezirk und Jahr.",
+      "requires": ["finance_wohnungsbau.v_wohnungsbau_official"],
+      "max_refreshes_per_day": 4,
+      "tables": [{"name": "Wohnungsbau", "description": "Eine Zeile je Bezirk und Startjahr"}],
+      "measures": [
+        {"name": "Einheiten", "description": "Summe der geförderten Wohneinheiten"},
+        {"name": "Förderung je Einheit", "description": "Gesamtförderung geteilt durch Einheiten"}
+      ]
+    }
+  },
+  "templates": {
+    "kennzahlen-uebersicht": {
+      "workspace_id": "00000000-0000-0000-0000-000000000000",
+      "report_id": "00000000-0000-0000-0000-000000000000",
+      "name": "Kennzahlen-Übersicht",
+      "description": "Kacheln für die Kennzahlen des Datasets und ein Verlauf nach Jahr.",
+      "dataset_keys": ["foerderung", "portfolio", "grw", "wohnungsbau"]
+    },
+    "bezirksvergleich": {
+      "workspace_id": "00000000-0000-0000-0000-000000000000",
+      "report_id": "00000000-0000-0000-0000-000000000000",
+      "name": "Bezirksvergleich",
+      "description": "Balkendiagramm der Kennzahlen je Berliner Bezirk mit Jahresfilter.",
+      "dataset_keys": ["foerderung", "grw", "wohnungsbau"]
+    }
+  }
+}
