@@ -91,3 +91,19 @@ def test_a_failed_token_request_is_reported_without_the_secret() -> None:
         client.list_reports(G)
     assert "s3cret" not in str(caught.value)
     assert caught.value.status == 401
+
+
+def test_create_push_dataset_posts_tables_with_push_mode() -> None:
+    tables = [{"name": "T", "columns": [{"name": "a", "dataType": "Int64"}], "measures": [{"name": "M", "expression": "SUM(T[a])"}]}]
+    client, seen = make(lambda r: httpx.Response(201, json={"id": D, "name": "Modell"}))
+    assert client.create_push_dataset(G, "Modell", tables)["id"] == D
+    assert seen[1].method == "POST"
+    assert str(seen[1].url) == f"https://api.powerbi.com/v1.0/myorg/groups/{G}/datasets"
+    assert json.loads(seen[1].content) == {"name": "Modell", "defaultMode": "Push", "tables": tables}
+
+
+def test_add_rows_posts_to_the_table_endpoint() -> None:
+    client, seen = make(lambda r: httpx.Response(200))
+    client.add_rows(G, D, "T", [{"a": 1}])
+    assert str(seen[1].url) == f"https://api.powerbi.com/v1.0/myorg/groups/{G}/datasets/{D}/tables/T/rows"
+    assert json.loads(seen[1].content) == {"rows": [{"a": 1}]}

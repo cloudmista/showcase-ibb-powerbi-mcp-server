@@ -78,6 +78,30 @@ class PowerBiClient:
             )
         return response
 
+    def create_push_dataset(self, group_id: str, name: str, tables: list[dict[str, object]]) -> dict[str, object]:
+        """
+        Create a push dataset with tables, typed columns and DAX measures, following Datasets Post Dataset In Group.
+
+        :param group_id str: Workspace the dataset is created in
+        :param name str: Dataset name
+        :param tables list: Table definitions with name, columns (name, dataType) and optional measures (name, expression)
+        :return: The created dataset with id and name
+        """
+        return self._request(
+            "POST", f"/groups/{group_id}/datasets", json={"name": name, "defaultMode": "Push", "tables": tables}
+        ).json()
+
+    def add_rows(self, group_id: str, dataset_id: str, table_name: str, rows: list[dict[str, object]]) -> None:
+        """
+        Add rows to a table of a push dataset, following Datasets Post Rows In Group.
+
+        :param group_id str: Workspace of the dataset
+        :param dataset_id str: Push dataset
+        :param table_name str: Target table
+        :param rows list: Rows as column name to value mappings
+        """
+        self._request("POST", f"/groups/{group_id}/datasets/{dataset_id}/tables/{table_name}/rows", json={"rows": rows})
+
     def refresh_dataset(self, group_id: str, dataset_id: str) -> str:
         """
         Trigger a standard refresh. With a service principal no mail notification is possible, so none is requested.
