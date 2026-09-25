@@ -87,12 +87,12 @@ def build_request(domain: str, github_username: str, github_token: str, is_updat
 
     :param domain str: Inference service domain, for example dev-inference-service-01.dev-dmc.qcc475.b0.cloudera.site
     :param github_username str: GitHub account that owns the personal access token
-    :param github_token str: GitHub PAT with repo access to fluxraum/showcase-ibb-powerbi-mcp-server
+    :param github_token str: GitHub PAT with repo access to cloudmista/showcase-ibb-powerbi-mcp-server
     :param is_update bool: Whether an application with this name already exists (see app_exists)
     :return: Request body dict
     """
     directory_source: dict[str, object] = {
-        "url": "https://github.com/fluxraum/showcase-ibb-powerbi-mcp-server.git",
+        "url": "https://github.com/cloudmista/showcase-ibb-powerbi-mcp-server.git",
         "entry_point": "start.sh",
         "runtime_image": RUNTIME_IMAGE,
         "credentials": {
