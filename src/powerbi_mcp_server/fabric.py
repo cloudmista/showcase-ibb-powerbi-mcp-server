@@ -109,6 +109,22 @@ class FabricClient:
             raise PowerBiError(response.status_code, f"Unerwartete Antwort von Fabric: HTTP {response.status_code}")
         return self._wait_for_result(response.headers["Location"], response.headers.get("Retry-After"))
 
+    def get_report_definition(self, workspace_id: str, report_id: str) -> list[dict[str, str]]:
+        """
+        Read the stored definition parts of a report, waiting for the long running operation if Fabric starts one.
+
+        :param workspace_id str: Workspace of the report
+        :param report_id str: Report to read
+        :return: Definition parts with path, payload and payloadType
+        :raises PowerBiError: If Fabric rejects the call or the operation fails
+        """
+        response = self._request("POST", f"{API_BASE}/workspaces/{workspace_id}/reports/{report_id}/getDefinition")
+        if response.status_code == 200:
+            return response.json()["definition"]["parts"]
+        if response.status_code != 202:
+            raise PowerBiError(response.status_code, f"Unerwartete Antwort von Fabric: HTTP {response.status_code}")
+        return self._wait_for_result(response.headers["Location"], response.headers.get("Retry-After"))["definition"]["parts"]
+
     def _wait_for_result(self, operation_url: str, retry_after: str | None) -> dict[str, object]:
         delay = float(retry_after) if retry_after and retry_after.isdigit() else DEFAULT_POLL_SECONDS
         for _ in range(MAX_POLLS):

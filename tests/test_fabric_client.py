@@ -84,3 +84,22 @@ def test_http_errors_carry_status_and_never_the_secret() -> None:
     assert caught.value.status == 403
     assert "s3cret" not in str(caught.value)
     assert "***" in str(caught.value)
+
+
+def test_get_report_definition_reads_parts_directly_or_through_the_operation() -> None:
+    parts = [{"path": "definition.pbir", "payload": "e30=", "payloadType": "InlineBase64"}]
+    client, seen, _ = make(lambda r: httpx.Response(200, json={"definition": {"parts": parts}}))
+    assert client.get_report_definition(W, "r-1") == parts
+    assert str(seen[1].url) == f"https://api.fabric.microsoft.com/v1/workspaces/{W}/reports/r-1/getDefinition"
+
+    op = "https://api.fabric.microsoft.com/v1/operations/op-9"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(202, headers={"Location": op})
+        if str(request.url) == f"{op}/result":
+            return httpx.Response(200, json={"definition": {"parts": parts}})
+        return httpx.Response(200, json={"status": "Succeeded"})
+
+    client, _, _ = make(handler)
+    assert client.get_report_definition(W, "r-1") == parts
