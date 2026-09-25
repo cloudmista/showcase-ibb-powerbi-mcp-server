@@ -381,9 +381,10 @@ class PowerBiService:
             if report is None:
                 return _denied()
             self._client.delete_report(self._agent_workspace, report_id)
-            for dataset in self._client.list_datasets(self._agent_workspace):
+            dataset_id = report.get("datasetId")
+            for dataset in self._client.list_datasets(self._agent_workspace) if dataset_id else []:
                 owner = parse_owner(dataset.get("name", ""))
-                if dataset.get("name") == report["name"] and owner and owner[0] == user:
+                if dataset["id"] == dataset_id and owner and owner[0] == user:
                     self._client.delete_dataset(self._agent_workspace, dataset["id"])
             return {"deleted": True}
 

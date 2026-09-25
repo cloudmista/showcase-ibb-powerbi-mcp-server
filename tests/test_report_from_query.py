@@ -152,15 +152,23 @@ def test_an_untrusted_user_name_is_refused() -> None:
     assert runner.calls == []
 
 
-def test_deleting_a_report_also_deletes_its_dataset() -> None:
+def test_deleting_a_report_deletes_only_its_own_dataset_even_if_titles_are_equal() -> None:
     service, client, *_ = make()
     name = "T" + owner_tag("alice", "2026-09-25")
-    client.reports = [{"id": "rep-1", "name": name}]
-    client.datasets = [{"id": "ds-1", "name": name}, {"id": "ds-2", "name": "Fremd"}]
+    client.reports = [{"id": "rep-1", "name": name, "datasetId": "ds-1"}, {"id": "rep-2", "name": name, "datasetId": "ds-2"}]
+    client.datasets = [{"id": "ds-1", "name": name}, {"id": "ds-2", "name": name}, {"id": "ds-3", "name": "Fremd"}]
     assert service.delete_report("alice", "rep-1") == {"deleted": True}
     assert ("delete_report", "rep-1") in client.calls
     assert ("delete_dataset", "ds-1") in client.calls
-    assert ("delete_dataset", "ds-2") not in client.calls
+    assert ("delete_dataset", "ds-2") not in client.calls and ("delete_dataset", "ds-3") not in client.calls
+
+
+def test_a_dataset_of_another_owner_is_never_deleted() -> None:
+    service, client, *_ = make()
+    client.reports = [{"id": "rep-1", "name": "T" + owner_tag("alice", "2026-09-25"), "datasetId": "ds-9"}]
+    client.datasets = [{"id": "ds-9", "name": "T" + owner_tag("bob", "2026-09-25")}]
+    service.delete_report("alice", "rep-1")
+    assert ("delete_dataset", "ds-9") not in client.calls
 
 
 def test_catalog_tools_report_placeholders_but_the_query_tool_does_not_need_the_catalog() -> None:
