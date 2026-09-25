@@ -13,9 +13,10 @@ PBI_ITEM="op://Private/showcase-ibb-powerbi-sp"
 export CAII_DOMAIN="dev-inference-service-01.dev-dmc.qcc475.b0.cloudera.site"
 export GITHUB_USERNAME="cloudmista"
 
+# Override with IMPALA_HOST=$(make -s -C ../showcase-ibb-dwh-setup host) after the warehouse was recreated.
 # Same warehouse and delegating service user as showcase-ibb-sql-mcp-server, used only to check which
 # Impala objects a user may query. Adjust the host if the virtual warehouse is recreated.
-export IMPALA_HOST="impala-proxy-dev-caaichris-ibb-showcase.dw-dev-dmc-base.qcc475.b0.cloudera.site"
+export IMPALA_HOST="${IMPALA_HOST:-impala-proxy-dev-caaichris-ibb-showcase.dw-dev-dmc-base.qcc475.b0.cloudera.site}"
 export IMPALA_PORT=443
 export IMPALA_HTTP_PATH=cliservice
 export IMPALA_PROXY_USER="srv_ibb_demo_mcp_user"

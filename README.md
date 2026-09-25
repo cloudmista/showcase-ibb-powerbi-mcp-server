@@ -60,7 +60,7 @@ melden alle Tools "Katalog enthält noch Platzhalter". Die Struktur wird beim La
 
 ## Deployment
 
-`./deploy.sh` (Secrets aus 1Password, `is_web_app: false`). Interne Adresse:
+Im Repo `showcase-ibb-main`: `make deploy APP=powerbi` (Secrets aus 1Password, `is_web_app: false`). Interne Adresse:
 `http://showcase-ibb-powerbi-mcp-server.serving-apps.svc.cluster.local:80/mcp`.
 
 ## Bekannte Grenzen
