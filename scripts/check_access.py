@@ -65,6 +65,10 @@ def main() -> int:
         print(f"  Workspace list OK, {len(items)} visible")
         for item in items:
             print(f"    {item.get(name_key)}  {item.get(id_key)}")
+            if label == "Fabric":
+                models = httpx.get(f"{url}/{item.get(id_key)}/semanticModels", headers={"Authorization": f"Bearer {token}"}, timeout=30)
+                for model in models.json().get("value", []) if models.status_code == 200 else []:
+                    print(f"      Semantic model: {model.get('displayName')}  {model.get('id')}")
     return 1 if failures else 0
 
 
